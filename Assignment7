@@ -1,0 +1,799 @@
+#include "LedControl.h"
+#include <FontLEDClock.h>                
+#include <Wire.h>                                             
+#include <Button.h>                      
+#include <EEPROM.h>
+#include <TimerOne.h>
+#define NOTE_B0  31
+#define NOTE_C1  33
+#define NOTE_CS1 35
+#define NOTE_D1  37
+#define NOTE_DS1 39
+#define NOTE_E1  41
+#define NOTE_F1  44
+#define NOTE_FS1 46
+#define NOTE_G1  49
+#define NOTE_GS1 52
+#define NOTE_A1  55
+#define NOTE_AS1 58
+#define NOTE_B1  62
+#define NOTE_C2  65
+#define NOTE_CS2 69
+#define NOTE_D2  73
+#define NOTE_DS2 78
+#define NOTE_E2  82
+#define NOTE_F2  87
+#define NOTE_FS2 93
+#define NOTE_G2  98
+#define NOTE_GS2 104
+#define NOTE_A2  110
+#define NOTE_AS2 117
+#define NOTE_B2  123
+#define NOTE_C3  131
+#define NOTE_CS3 139
+#define NOTE_D3  147
+#define NOTE_DS3 156
+#define NOTE_E3  165
+#define NOTE_F3  175
+#define NOTE_FS3 185
+#define NOTE_G3  196
+#define NOTE_GS3 208
+#define NOTE_A3  220
+#define NOTE_AS3 233
+#define NOTE_B3  247
+#define NOTE_C4  262
+#define NOTE_CS4 277
+#define NOTE_D4  294
+#define NOTE_DS4 311
+#define NOTE_E4  330
+#define NOTE_F4  349
+#define NOTE_FS4 370
+#define NOTE_G4  392
+#define NOTE_GS4 415
+#define NOTE_A4  440
+#define NOTE_AS4 466
+#define NOTE_B4  494
+#define NOTE_C5  523
+#define NOTE_CS5 554
+#define NOTE_D5  587
+#define NOTE_DS5 622
+#define NOTE_E5  659
+#define NOTE_F5  698
+#define NOTE_FS5 740
+#define NOTE_G5  784
+#define NOTE_GS5 831
+#define NOTE_A5  880
+#define NOTE_AS5 932
+#define NOTE_B5  988
+#define NOTE_C6  1047
+#define NOTE_CS6 1109
+#define NOTE_D6  1175
+#define NOTE_DS6 1245
+#define NOTE_E6  1319
+#define NOTE_F6  1397
+#define NOTE_FS6 1480
+#define NOTE_G6  1568
+#define NOTE_GS6 1661
+#define NOTE_A6  1760
+#define NOTE_AS6 1865
+#define NOTE_B6  1976
+#define NOTE_C7  2093
+#define NOTE_CS7 2217
+#define NOTE_D7  2349
+#define NOTE_DS7 2489
+#define NOTE_E7  2637
+#define NOTE_F7  2794
+#define NOTE_FS7 2960
+#define NOTE_G7  3136
+#define NOTE_GS7 3322
+#define NOTE_A7  3520
+#define NOTE_AS7 3729
+#define NOTE_B7  3951
+#define NOTE_C8  4186
+#define NOTE_CS8 4435
+#define NOTE_D8  4699
+#define NOTE_DS8 4978
+LedControl lc = LedControl(12, 11, 10, 4); 
+byte intensity = 7;                      
+byte clock_mode = 0;                     
+bool random_mode = 0;                    
+byte old_mode = clock_mode;              
+bool ampm = 0;                           
+byte change_mode_time = 0;               
+unsigned long delaytime = 500;           
+int rtc[7];                          
+byte months = 0;
+byte date = 0;
+byte hours = 0;
+byte minutes = 0;
+byte seconds = 0;
+int melody[] = {
+  NOTE_C4, NOTE_G3, NOTE_G3, NOTE_A3, NOTE_G3, 0, NOTE_B3, NOTE_C4
+};
+int melody2[] = {
+  NOTE_E6, NOTE_D6, NOTE_D6, NOTE_E6, NOTE_D6, NOTE_D6, NOTE_E6, NOTE_B2
+};
+int noteDurations[] = {
+  4, 8, 8, 4, 4, 4, 4, 4
+};
+int noteDurations2[] = {
+  4, 8, 8, 4, 4, 4, 4, 4
+};
+                                        
+#define cls clear_display                                   
+Button buttonA = Button(2, BUTTON_PULLUP);      
+Button buttonB = Button(3, BUTTON_PULLUP);      
+
+void setup() {                             
+  
+  Serial.begin(9600); 
+  int devices = lc.getDeviceCount();
+  for (int address = 0; address < devices; address++) {
+    lc.shutdown(address, false);
+    lc.setIntensity(address, intensity);
+    lc.clearDisplay(address);
+  } 
+  printver();
+  Timer1.initialize(1000000);
+  Timer1.attachInterrupt(maintime);  
+}
+
+void loop() {
+    
+  Lord_time();
+  switch (clock_mode){
+        
+  case 0: 
+    basic_mode();
+    break; 
+  case 1: 
+   small_mode(); 
+    break;
+  case 2: 
+     setup_menu();
+    break;
+  case 3: 
+    save_time();
+    break;
+   case 4: 
+    clock_mode=0;
+    break;
+  }
+}
+void Lord_time(){
+  EEPROM.get(0,seconds);
+  EEPROM.get(1,minutes);
+  EEPROM.get(2,hours);
+  EEPROM.get(3,date);
+  EEPROM.get(4,months);
+  }
+
+void plot (byte x, byte y, byte val) {
+
+  byte address;
+  if (x >= 0 && x <= 7)   {
+    address = 3;
+  }
+  if (x >= 8 && x <= 15)  {
+    address = 2;
+    x = x - 8;
+  }
+  if (x >= 16 && x <= 23) {
+    address = 1;
+    x = x - 16;
+  }
+  if (x >= 24 && x <= 31) {
+    address = 0;
+    x = x - 24;
+  }
+
+  if (val == 1) {
+    lc.setLed(address, y, x, 1);
+  } else {
+    lc.setLed(address, y, x, 0);
+  }
+}
+
+
+void clear_display() {
+  for (byte address = 0; address < 4; address++) {
+    lc.clearDisplay(address);
+  }
+}
+
+void fade_down() {
+
+  for (byte i = intensity; i > 0; i--) {
+    for (byte address = 0; address < 4; address++) {
+      lc.setIntensity(address, i);
+    }
+    delay(30); 
+  }
+
+  clear_display(); 
+
+  for (byte address = 0; address < 4; address++) {
+    lc.setIntensity(address, intensity);
+  }
+}
+
+
+void printver() {
+
+  byte i = 0;
+  char ver_a[9] = "  AC 7";
+  char ver_b[9] = "  ITC30 ";
+  for (byte x = 0; x <= 31; x++) {
+    for (byte y = 0; y <= 7; y++) {
+      plot(x, y, 1);
+    }
+  }
+  delay(500);
+  fade_down();
+
+  while (ver_a[i]) {
+    puttinychar((i * 4), 1, ver_a[i]);
+    delay(35);
+    i++;
+  }
+  delay(700);
+  fade_down();
+  i = 0;
+  while (ver_b[i]) {
+    puttinychar((i * 4), 1, ver_b[i]);
+    delay(35);
+    i++;
+  }
+  for (int thisNote = 0; thisNote < 8; thisNote++) {
+    int noteDuration = 1000 / noteDurations[thisNote];
+    tone(5, melody[thisNote], noteDuration);
+    int pauseBetweenNotes = noteDuration * 1.30;
+    delay(pauseBetweenNotes);
+    noTone(5);
+  }
+  delay(700);
+  fade_down();
+}
+
+void puttinychar(byte x, byte y, char c)
+{
+  byte dots;
+  if (c >= 'A' && c <= 'Z' || (c >= 'a' && c <= 'z') ) {
+    c &= 0x1F;   
+  }
+  else if (c >= '0' && c <= '9') {
+    c = (c - '0') + 32;
+  }
+  else if (c == ' ') {
+    c = 0; 
+  }
+  else if (c == '.') {
+    c = 27; 
+  }
+  else if (c == ':') {
+    c = 28; 
+  }
+  else if (c == '\'') {
+    c = 29; 
+  }
+  else if (c == '!') {
+    c = 30; 
+  }
+  else if (c == '?') {
+    c = 31; 
+  }
+
+  for (byte col = 0; col < 3; col++) {
+    dots = pgm_read_byte_near(&mytinyfont[c][col]);
+    for (char row = 0; row < 5; row++) {
+      if (dots & (16 >> row))
+        plot(x + col, y + row, 1);
+      else
+        plot(x + col, y + row, 0);
+    }
+  }
+}
+
+
+
+void putnormalchar(byte x, byte y, char c)
+{
+
+  byte dots;
+  if (c >= 'A' && c <= 'Z' ) {
+    c &= 0x1F;  
+  }
+  else if (c >= 'a' && c <= 'z') {
+    c = (c - 'a') + 41;
+  }
+  else if (c >= '0' && c <= '9') {
+    c = (c - '0') + 31;
+  }
+  else if (c == ' ') {
+    c = 0; 
+  }
+  else if (c == '.') {
+    c = 27; 
+  }
+  else if (c == '\'') {
+    c = 28; 
+  }
+  else if (c == ':') {
+    c = 29; 
+  }
+  else if (c == '>') {
+    c = 30; 
+  }
+  else if (c >= -80 && c <= -67) {
+    c *= -1;
+  }
+
+  for (char col = 0; col < 5; col++) {
+    dots = pgm_read_byte_near(&myfont[c][col]);
+    for (char row = 0; row < 7; row++) {
+      if (dots & (64 >> row)) {
+        plot(x + col, y + row, 1);
+      } else {
+        plot(x + col, y + row, 0);
+      }
+    }
+  }
+}
+
+void small_mode() {
+
+  char textchar[8]; 
+  byte mins = 100; 
+  byte secs = rtc[0];
+  byte old_secs = secs;
+  
+  cls();
+  while (run_mode()) {
+
+    get_time();
+    if (buttonA.uniquePress()) {
+      tone(5, 500, 100);
+      switch_mode();
+      return;
+    }
+    if (buttonB.uniquePress()) {
+       tone(5, 500, 100);
+      display_date();
+      return;
+    }
+    secs = rtc[0];
+    if (secs != old_secs) {
+      char buffer[3];
+      itoa(secs, buffer, 10);
+      if (secs < 10) {
+        buffer[1] = buffer[0];
+        buffer[0] = '0';
+      }
+
+      puttinychar( 20, 1, ':'); 
+      puttinychar( 24, 1, buffer[0]); 
+      puttinychar( 28, 1, buffer[1]); 
+      old_secs = secs;
+    }
+    if (mins != rtc[1]) {
+      mins = rtc[1];
+      byte hours = rtc[2];
+      if (hours > 12) {
+        hours = hours - ampm * 12;
+      }
+      if (hours < 1) {
+        hours = hours + ampm * 12;
+      }
+      char buffer[3];
+      itoa(hours, buffer, 10);
+      if (hours < 10) {
+        buffer[1] = buffer[0];
+        if (ampm) {
+          buffer[0] = ' ';
+        }
+        else {
+          buffer[0] = '0';
+        }
+      }
+      textchar[0] = buffer[0];
+      textchar[1] = buffer[1];
+      textchar[2] = ':';
+
+      itoa (mins, buffer, 10);
+      if (mins < 10) {
+        buffer[1] = buffer[0];
+        buffer[0] = '0';
+      }
+      textchar[3] = buffer[0];
+      textchar[4] = buffer[1];
+      textchar[5] = ':';
+      buffer[3];
+      secs = rtc[0];
+      itoa(secs, buffer, 10);
+      if (secs < 10) {
+        buffer[1] = buffer[0];
+        buffer[0] = '0';
+      }
+      textchar[6] = buffer[0];
+      textchar[7] = buffer[1];
+
+      byte x = 0;
+      byte y = 0;
+
+      for (byte x = 0; x < 6 ; x++) {
+        puttinychar( x * 4, 1, textchar[x]);
+      }
+    }
+    delay(50);
+  }
+  fade_down();
+}
+
+void basic_mode()
+{
+  cls();
+
+  char buffer[3];   
+  byte offset = 0;  
+  byte x, y;
+  byte hours = rtc[2];
+
+  if (hours > 12) {
+    hours = hours - ampm * 12;
+  }
+  if (hours < 1) {
+    hours = hours + ampm * 12;
+  }
+
+  if (ampm && hours < 10) {
+    offset = 2;
+  }
+  byte secs = 100;
+  byte mins = 100;
+  int count = 0;
+  while (run_mode()) {
+    get_time();
+    if (buttonA.uniquePress()) {
+      tone(5, 500, 100);
+      switch_mode();
+      return;
+    }
+    if (buttonB.uniquePress()) {
+      tone(5, 500, 100);
+      display_date();
+      return;
+    }
+    if (secs != rtc[0]) {
+      secs = rtc[0];
+      plot (15 - offset, 2, 1); 
+      plot (15 - offset, 5, 1);
+      count = 400;
+    }
+    if (count == 0) {
+      plot (15 - offset, 2, 0); 
+      plot (15 - offset, 5, 0); 
+    }
+    else {
+      count--;
+    }
+    if (mins != rtc[1]) {
+
+      mins = rtc[1];
+      hours = rtc[2];
+      if (hours > 12) {
+        hours = hours - ampm * 12;
+      }
+      if (hours < 1) {
+        hours = hours + ampm * 12;
+      }
+
+      itoa(hours, buffer, 10);
+      if (hours < 10) {
+        buffer[1] = buffer[0];
+        buffer[0] = '0';
+      }
+      if (ampm && hours < 10) {
+        offset = 2;
+        if ((hours == 1 && mins == 0) ) {
+          cls();
+        }
+      }
+      else {
+        offset = 0;
+        if (hours == 10 && mins == 0) {
+          cls();
+        }
+
+        putnormalchar(1,  0, buffer[0]);
+      }
+      putnormalchar(7 - offset, 0, buffer[1]);
+      itoa (mins, buffer, 10);
+      if (mins < 10) {
+        buffer[1] = buffer[0];
+        buffer[0] = '0';
+      }
+      putnormalchar(19 - offset, 0, buffer[0]);
+      putnormalchar(25 - offset, 0, buffer[1]);
+    }
+  }
+  fade_down();
+}
+
+void display_date()
+{
+  cls();
+  byte i = 0;
+  char ver_a[9] = "  KMITL";
+  char ver_b[9] = "  2564 ";
+  while (ver_a[i]) {
+    puttinychar((i * 4), 1, ver_a[i]);
+    delay(35);
+    i++;
+  }
+  delay(700);
+  fade_down();
+  i = 0;
+  while (ver_b[i]) {
+    puttinychar((i * 4), 1, ver_b[i]);
+    delay(35);
+    i++;
+  }
+  delay(700);
+  fade_down();
+  }
+
+void switch_mode() {
+  old_mode = clock_mode;
+  char* modes[] = {
+    "Basic", "Small","Setup", "SaveT","Back"
+  };
+
+  byte next_clock_mode;
+  byte firstrun = 1;
+  for (int count = 0; count < 35 ; count++) {
+    if (buttonA.uniquePress() || firstrun == 1) {
+       tone(5, 500, 100);
+      count = 0;
+      cls();
+
+      if (firstrun == 0) {
+        clock_mode++;
+      }
+      if (clock_mode > 4 ) {
+        clock_mode = 0;
+      }
+      char str_top[9];
+      strcpy (str_top, modes[clock_mode]);
+
+      next_clock_mode = clock_mode + 1;
+      if (next_clock_mode >  4 ) {
+        next_clock_mode = 0;
+      }
+
+      byte i = 0;
+      while (str_top[i]) {
+        putnormalchar(i * 6, 0, str_top[i]);
+        i++;
+      }
+      firstrun = 0;
+    }
+    delay(50);
+  }
+}
+
+byte run_mode() {
+
+  if (random_mode) {
+    if (change_mode_time == rtc[2]) {
+      set_next_random();
+      return 0;
+    }
+  }
+  return 1;
+}
+
+void set_next_random() {
+
+  get_time();
+  change_mode_time = rtc[2] + random (1, 5);
+  if (change_mode_time > 23) {
+    change_mode_time = random (1, 4);
+  }
+  clock_mode = random(0, 4);  
+}
+
+void setup_menu() {
+
+  char* set_modes[] = {
+     "SetT", "Brght", "Exit"}; 
+  if (ampm == 0) { 
+    set_modes[1] = ("Brght"); 
+  }
+
+  byte setting_mode = 0;
+  byte next_setting_mode;
+  byte firstrun = 1;
+  for(int count=0; count < 35 ; count++) {
+    if(buttonA.uniquePress() || firstrun == 1){
+
+      count = 0;
+      cls();
+
+      if (firstrun == 0) { 
+        setting_mode++; 
+      } 
+      if (setting_mode > 4) { 
+        setting_mode = 0; 
+      }
+      char str_top[9];
+    
+      strcpy (str_top, set_modes[setting_mode]);
+
+      next_setting_mode = setting_mode + 1;
+      if (next_setting_mode > 4) { 
+        next_setting_mode = 0; 
+      }
+      
+      byte i = 0;
+      while(str_top[i]) {
+        putnormalchar(i*6, 0, str_top[i]); 
+        i++;
+      }
+
+      firstrun = 0;
+    }
+    delay(50); 
+  }
+  
+  switch(setting_mode){
+    case 0: 
+       set_time();  
+      break;
+    case 1: 
+       set_intensity(); 
+      break;
+    case 2:  
+      break;
+  } 
+  clock_mode=old_mode;
+}
+
+
+
+void set_intensity() {
+  cls();  
+  byte i = 0;
+  char text[7] = "Bright";
+  while(text[i]) {
+    puttinychar((i*4)+4, 0, text[i]);
+    i++;
+  }
+  while (!buttonA.uniquePress()) {
+
+    levelbar (0,6,(intensity*2)+2,2); 
+    while (buttonB.isPressed()) {
+      tone(5, 500, 100);
+      if(intensity == 15) { 
+        intensity = 0;
+        cls (); 
+      } 
+      else {
+        intensity++; 
+      }
+      i = 0;
+      while(text[i]) {
+        puttinychar((i*4)+4, 0, text[i]);
+        i++;
+      }
+      levelbar (0,6,(intensity*2)+2,2);    
+      for (byte address = 0; address < 4; address++) {
+        lc.setIntensity(address, intensity);
+      }
+      delay(150);
+    }
+  }
+}
+
+void levelbar (byte xpos, byte ypos, byte xbar, byte ybar) {
+  for (byte x = 0; x < xbar; x++) {
+    for (byte y = 0; y <= ybar; y++) {
+      plot(x+xpos, y+ypos, 1);
+    }
+  }
+}
+
+
+void set_time() {
+  cls();
+  get_time();
+  byte set_min   = rtc[1];
+  byte set_hr    = rtc[2];
+  set_hr   = set_value(1, set_hr, 0, 23);
+  set_min  = set_value(0, set_min, 0, 59);
+  cls();
+}
+
+int set_value(byte message, int current_value, int reset_value, int rollover_limit){
+
+  cls();
+  char messages[3][17]   = {
+    "Set Mins", "Set Hour"};
+  byte i = 0;
+  while(messages[message][i])
+  {
+    puttinychar(i*4 , 1, messages[message][i]); 
+    i++;
+  }
+
+  delay(2000);
+  cls();
+  char buffer[5] = "    ";
+  itoa(current_value,buffer,10);
+  puttinychar(0 , 1, buffer[0]); 
+  puttinychar(4 , 1, buffer[1]); 
+  puttinychar(8 , 1, buffer[2]); 
+  puttinychar(12, 1, buffer[3]); 
+
+  delay(300);
+  while (!buttonA.uniquePress()) {
+
+    while (buttonB.isPressed()){
+
+      if(current_value < rollover_limit) { 
+        current_value++;
+      } 
+      else {
+        current_value = reset_value;
+      }
+      itoa(current_value, buffer ,10);
+      puttinychar(0 , 1, buffer[0]); 
+      puttinychar(4 , 1, buffer[1]); 
+      puttinychar(8 , 1, buffer[2]); 
+      puttinychar(12, 1, buffer[3]);    
+      delay(150);
+    }
+  }
+  return current_value;
+}
+
+void get_time()
+{
+  maintime();
+  rtc[6] = 2021;
+  rtc[5] = months;
+  rtc[4] = date;
+  rtc[2] = hours;
+  rtc[1] = minutes;
+  rtc[0] = seconds;
+}
+void maintime()
+{
+     seconds++;
+     if (seconds > 59) {
+    seconds = 0;
+    minutes++;
+  }
+  if (minutes > 59) {
+    minutes = 0;
+    hours++; 
+  }
+  if (hours > 23) {
+    hours = 0;
+  }
+}
+void save_time(){
+  if (buttonA.uniquePress()) {
+       tone(5, 500, 100);
+      switch_mode();
+      return;
+    }
+    if (buttonB.uniquePress()) {
+   tone(5, 500, 100);
+  EEPROM.put(0,seconds);
+  EEPROM.put(1,minutes);
+  EEPROM.put(2,hours);
+  EEPROM.put(3,date);
+  EEPROM.put(4,months);
+      return;
+    }
+  }
